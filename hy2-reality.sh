@@ -625,8 +625,8 @@ done
 if [[ "$MODE" == "ask" ]]; then
   echo ""
   echo -e "${green}======== 请选择安装类型 ========${re}"
-  echo "  1) Hysteria2  (自动测速调优，Brutal)"
-  echo "  2) Reality    (VLESS + Reality)"
+  echo "  1) Hysteria2  (自动测速调优，Brutal) [重装会覆盖已有安装]"
+  echo "  2) Reality    (VLESS + Reality) [重装会覆盖已有安装]"
   echo "  0) 退出"
   echo -e "${green}================================${re}"
   read -r -p "输入序号 [1/2/0]: " _c </dev/tty

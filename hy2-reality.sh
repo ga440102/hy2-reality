@@ -3,14 +3,16 @@
 # hy2-reality.sh — Hysteria2 + Reality 二合一安装脚本 (带选项)
 #
 # 用法:
-#   整段粘贴到 root 终端回车, 按菜单选 1 或 2
+#   整段粘贴到 root 终端回车, 按菜单安装 / 卸载
 #   bash hy2-reality.sh hy2                # 直接装 HY2, 跳过菜单
 #   bash hy2-reality.sh reality            # 直接装 Reality, 跳过菜单
+#   bash hy2-reality.sh uninstall-hy2      # 卸载 HY2, 跳过菜单
+#   bash hy2-reality.sh uninstall-reality  # 卸载 Reality, 跳过菜单
 #   bash hy2-reality.sh hy2 --measure-only # 只测速不安装
 #   bash hy2-reality.sh hy2 --no-bandwidth # HY2 跳过测速, BBR 模式安装
 #
 # 可调选项 (粘贴前改这里):
-#   MODE="ask"                     # ask=运行时菜单 / hy2=直接装HY2 / reality=直接装Reality
+#   MODE="ask"   # ask=菜单 / hy2 / reality / uninstall-hy2 / uninstall-reality
 #   HY2_PORT="8443"                # HY2 UDP 端口 (被占用则随机)
 #   SKIP_BANDWIDTH=0               # 1=跳过测速与带宽参数, BBR 模式装 HY2
 #   MEASURE_ONLY=0                 # 1=只测速不安装
@@ -24,7 +26,7 @@
 #             测速失败时可重测 / 降级 BBR / 退出
 #   Reality 部分: VLESS + TCP + Reality, 伪装站与 SNI 一致, 自动放行防火墙,
 #             输出 vless 链接 + 二维码 + Clash 配置片段
-#   两个协议互相独立, 装完一个可选择继续装另一个
+#   菜单开机先显示已安装状态; 卸载会删除服务、配置、证书/密钥与二进制, 并清理本机防火墙规则
 # ============================================================================
 (
 export LANG=en_US.UTF-8
@@ -36,7 +38,7 @@ info() { echo -e "${green}[信息] $*${re}"; }
 warn() { echo -e "${yellow}[警告] $*${re}" >&2; }
 
 # ---------- 可调选项 ----------
-MODE="${MODE:-ask}"                  # ask / hy2 / reality
+MODE="${MODE:-ask}"                  # ask / hy2 / reality / uninstall-hy2 / uninstall-reality
 HY2_PORT="${HY2_PORT:-8443}"
 SKIP_BANDWIDTH="${SKIP_BANDWIDTH:-0}"
 MEASURE_ONLY="${MEASURE_ONLY:-0}"
@@ -612,43 +614,137 @@ print_link
 )
 
 # ============================================================================
+# 安装状态探测与卸载
+# ============================================================================
+HY2_CONF="/etc/hysteria/config.yaml"
+XRAY_CONF="/usr/local/etc/xray/config.json"
+
+detect_status() {
+  HY2_STATE="未安装"; HY2_DETAIL=""
+  if [[ -f "$HY2_CONF" ]]; then
+    local p
+    p=$(sed -n 's/^listen: :\([0-9][0-9]*\).*/\1/p' "$HY2_CONF" 2>/dev/null | head -1)
+    HY2_STATE="已安装"; HY2_DETAIL="UDP ${p:-未知端口}"
+    if systemctl is-active --quiet hysteria-server.service 2>/dev/null; then
+      HY2_DETAIL="$HY2_DETAIL, 运行中"
+    else
+      HY2_DETAIL="$HY2_DETAIL, 未运行"
+    fi
+  fi
+  RE_STATE="未安装"; RE_DETAIL=""
+  if [[ -f "$XRAY_CONF" ]]; then
+    local p
+    p=$(grep -o '"port": [0-9][0-9]*' "$XRAY_CONF" 2>/dev/null | head -1 | grep -o '[0-9][0-9]*' || true)
+    RE_STATE="已安装"; RE_DETAIL="TCP ${p:-未知端口}"
+    if systemctl is-active --quiet xray.service 2>/dev/null; then
+      RE_DETAIL="$RE_DETAIL, 运行中"
+    else
+      RE_DETAIL="$RE_DETAIL, 未运行"
+    fi
+  fi
+}
+
+clean_firewall_rule() {  # $1=端口 $2=udp|tcp, 尽力清理本机防火墙规则
+  local port=$1 proto=$2
+  [[ -n "$port" ]] || return 0
+  if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw delete allow "$port"/"$proto" >/dev/null 2>&1 || true
+  fi
+  if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -q running; then
+    firewall-cmd --permanent --remove-port="$port"/"$proto" >/dev/null 2>&1 || true
+    firewall-cmd --reload >/dev/null 2>&1 || true
+  fi
+}
+
+uninstall_hy2() {
+  if [[ ! -f "$HY2_CONF" ]]; then
+    echo -e "${yellow}Hysteria2 未安装, 无需卸载${re}"
+    return 0
+  fi
+  local port
+  port=$(sed -n 's/^listen: :\([0-9][0-9]*\).*/\1/p' "$HY2_CONF" 2>/dev/null | head -1)
+  echo -e "${yellow}将卸载 Hysteria2 (停止服务, 删除配置、证书与程序)${re}"
+  local _c
+  read -r -p "确定继续? (y/n) [n]: " _c </dev/tty
+  [[ "$_c" =~ ^[Yy]$ ]] || { echo "已取消"; return 0; }
+  systemctl stop hysteria-server.service 2>/dev/null || true
+  systemctl disable hysteria-server.service 2>/dev/null || true
+  rm -f /etc/systemd/system/hysteria-server.service
+  rm -f /usr/local/bin/hysteria
+  rm -rf /etc/hysteria
+  systemctl daemon-reload 2>/dev/null || true
+  clean_firewall_rule "$port" udp
+  echo -e "${green}Hysteria2 已卸载${re}"
+  [[ -n "$port" ]] && echo -e "${yellow}提示: 云安全组中 UDP $port 的放行规则如不再需要, 请手动删除${re}"
+}
+
+uninstall_reality() {
+  if [[ ! -f "$XRAY_CONF" ]]; then
+    echo -e "${yellow}Reality 未安装, 无需卸载${re}"
+    return 0
+  fi
+  local port
+  port=$(grep -o '"port": [0-9][0-9]*' "$XRAY_CONF" 2>/dev/null | head -1 | grep -o '[0-9][0-9]*' || true)
+  echo -e "${yellow}将卸载 Reality (停止服务, 删除配置、密钥与程序)${re}"
+  local _c
+  read -r -p "确定继续? (y/n) [n]: " _c </dev/tty
+  [[ "$_c" =~ ^[Yy]$ ]] || { echo "已取消"; return 0; }
+  if command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
+    systemctl stop xray.service 2>/dev/null || true
+    systemctl disable xray.service 2>/dev/null || true
+    rm -f /etc/systemd/system/xray.service
+    systemctl daemon-reload 2>/dev/null || true
+  fi
+  pkill -f "[x]ray run" 2>/dev/null || true
+  rm -f /usr/local/bin/xray
+  rm -rf /usr/local/etc/xray
+  rm -rf /usr/local/share/xray
+  rm -f /var/log/xray-reality.log
+  clean_firewall_rule "$port" tcp
+  echo -e "${green}Reality 已卸载${re}"
+  [[ -n "$port" ]] && echo -e "${yellow}提示: 云安全组中 TCP $port 的放行规则如不再需要, 请手动删除${re}"
+}
+
+# ============================================================================
 # 菜单与分发
 # ============================================================================
 INSTALL_ARGS=()
 for arg in "$@"; do
   case "$arg" in
-    hy2|reality) MODE="$arg" ;;
+    hy2|reality|uninstall-hy2|uninstall-reality) MODE="$arg" ;;
     *) INSTALL_ARGS+=("$arg") ;;
   esac
 done
 
 if [[ "$MODE" == "ask" ]]; then
+  detect_status
   echo ""
-  echo -e "${green}======== 请选择安装类型 ========${re}"
-  echo "  1) Hysteria2  (自动测速调优，Brutal) [重装会覆盖已有安装]"
-  echo "  2) Reality    (VLESS + Reality) [重装会覆盖已有安装]"
+  echo -e "${green}======== HY2 / Reality 管理 ========${re}"
+  echo -e "  Hysteria2: ${skyblue}${HY2_STATE}${HY2_DETAIL:+ ($HY2_DETAIL)}${re}"
+  echo -e "  Reality:   ${skyblue}${RE_STATE}${RE_DETAIL:+ ($RE_DETAIL)}${re}"
+  echo ""
+  echo "  1) 安装 Hysteria2  (自动测速调优) [重装会覆盖已有安装]"
+  echo "  2) 安装 Reality    (VLESS + Reality) [重装会覆盖已有安装]"
+  echo "  3) 卸载 Hysteria2"
+  echo "  4) 卸载 Reality"
   echo "  0) 退出"
-  echo -e "${green}================================${re}"
-  read -r -p "输入序号 [1/2/0]: " _c </dev/tty
+  echo -e "${green}====================================${re}"
+  read -r -p "输入序号 [1/2/3/4/0]: " _c </dev/tty
   case "$_c" in
     1) MODE=hy2 ;;
     2) MODE=reality ;;
+    3) MODE=uninstall-hy2 ;;
+    4) MODE=uninstall-reality ;;
     0) echo "已退出"; exit 0 ;;
     *) die "无效选择" ;;
   esac
 fi
 
 case "$MODE" in
-  hy2)     run_hy2 "${INSTALL_ARGS[@]}" ;;
-  reality) run_reality ;;
-  *)       die "MODE 非法: $MODE (可选 ask/hy2/reality)" ;;
+  hy2)               run_hy2 "${INSTALL_ARGS[@]}" ;;
+  reality)           run_reality ;;
+  uninstall-hy2)     uninstall_hy2 ;;
+  uninstall-reality) uninstall_reality ;;
+  *)                 die "MODE 非法: $MODE (可选 ask/hy2/reality/uninstall-hy2/uninstall-reality)" ;;
 esac
-
-_other=reality; _oname="Reality"
-if [[ "$MODE" == "reality" ]]; then _other=hy2; _oname="Hysteria2"; fi
-echo ""
-read -r -p "是否继续安装 ${_oname}? (y/n) [n]: " _a </dev/tty
-if [[ "$_a" =~ ^[Yy]$ ]]; then
-  if [[ "$_other" == "hy2" ]]; then run_hy2; else run_reality; fi
-fi
 )

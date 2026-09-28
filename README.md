@@ -12,8 +12,15 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy
 
 ## 直接指定协议
 
+只装 Hysteria2：
+
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy2-reality.sh) hy2
+```
+
+只装 Reality：
+
+```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy2-reality.sh) reality
 ```
 

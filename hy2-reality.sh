@@ -8,6 +8,7 @@
 #   bash hy2-reality.sh reality            # 直接装 Reality, 跳过菜单
 #   bash hy2-reality.sh uninstall-hy2      # 卸载 HY2, 跳过菜单
 #   bash hy2-reality.sh uninstall-reality  # 卸载 Reality, 跳过菜单
+#   bash hy2-reality.sh show               # 查看已安装节点信息, 跳过菜单
 #   bash hy2-reality.sh hy2 --measure-only # 只测速不安装
 #   bash hy2-reality.sh hy2 --no-bandwidth # HY2 跳过测速, BBR 模式安装
 #
@@ -39,7 +40,7 @@ info() { echo -e "${green}[信息] $*${re}"; }
 warn() { echo -e "${yellow}[警告] $*${re}" >&2; }
 
 # ---------- 可调选项 ----------
-MODE="${MODE:-ask}"                  # ask / hy2 / reality / uninstall-hy2 / uninstall-reality
+MODE="${MODE:-ask}"                  # ask / hy2 / reality / uninstall-hy2 / uninstall-reality / show
 HY2_PORT="${HY2_PORT:-8443}"
 SKIP_BANDWIDTH="${SKIP_BANDWIDTH:-0}"
 MEASURE_ONLY="${MEASURE_ONLY:-0}"
@@ -53,6 +54,46 @@ REALITY_DEST="${REALITY_DEST:-}"
 REALITY_UUID="${REALITY_UUID:-}"
 
 [[ $EUID -ne 0 ]] && die "请在 root 用户下运行脚本"
+
+# ---------- 公共函数 (顶层定义, 各子 shell 均可继承) ----------
+get_ip() {
+  HOST_IP=$(curl -4 -s --max-time 5 ipv4.ip.sb)
+  [ -z "$HOST_IP" ] && HOST_IP=$(curl -s --max-time 5 ipv4.ip.sb)
+  [ -z "$HOST_IP" ] && { echo -e "${red}无法获取公网 IP${re}"; exit 1; }
+}
+
+print_links() {
+  local port=$1 passwd=$2
+  local tag="HY2-${HOST_IP}"
+  echo ""
+  echo -e "${green}========== 节点信息 ==========${re}"
+  echo -e "端口: ${skyblue}$port${re}  密码: ${skyblue}$passwd${re}"
+  if [ -n "${CFG_UP_MBPS:-}" ]; then
+    echo -e "带宽: up ${CFG_UP_MBPS} Mbps / down ${CFG_DOWN_MBPS} Mbps (Brutal 已启用)"
+  else
+    echo -e "${yellow}未设置带宽参数, 当前为 BBR 模式${re}"
+  fi
+  echo ""
+  echo -e "${yellow}--- V2rayN / Nekobox / Streisand ---${re}"
+  echo "hysteria2://$passwd@$HOST_IP:$port/?sni=www.bing.com&alpn=h3&insecure=1#$tag"
+  echo ""
+  echo -e "${yellow}--- Clash / Mihomo ---${re}"
+  echo "- name: $tag"
+  echo "  type: hysteria2"
+  echo "  server: $HOST_IP"
+  echo "  port: $port"
+  echo "  password: $passwd"
+  if [ -n "${CFG_UP_MBPS:-}" ]; then
+    echo "  up: \"${CFG_UP_MBPS} Mbps\""
+    echo "  down: \"${CFG_DOWN_MBPS} Mbps\""
+  fi
+  echo "  sni: www.bing.com"
+  echo "  alpn:"
+  echo "    - h3"
+  echo "  skip-cert-verify: true"
+  echo ""
+  echo -e "${red}注意: 云厂商安全组 (如 AWS) 需手动放行 UDP $port, 脚本够不着控制台${re}"
+}
 
 # ============================================================================
 # HY2 部分 (独立子 shell, 与 Reality 部分零冲突)
@@ -254,45 +295,6 @@ open_firewall() {
   else
     echo -e "${yellow}未检测到启用的本机防火墙 (云厂商安全组请手动放行 UDP $port)${re}"
   fi
-}
-
-get_ip() {
-  HOST_IP=$(curl -4 -s --max-time 5 ipv4.ip.sb)
-  [ -z "$HOST_IP" ] && HOST_IP=$(curl -s --max-time 5 ipv4.ip.sb)
-  [ -z "$HOST_IP" ] && { echo -e "${red}无法获取公网 IP${re}"; exit 1; }
-}
-
-print_links() {
-  local port=$1 passwd=$2
-  local tag="HY2-${HOST_IP}"
-  echo ""
-  echo -e "${green}========== 安装完成 ==========${re}"
-  echo -e "端口: ${skyblue}$port${re}  密码: ${skyblue}$passwd${re}"
-  if [ -n "${CFG_UP_MBPS:-}" ]; then
-    echo -e "带宽: up ${CFG_UP_MBPS} Mbps / down ${CFG_DOWN_MBPS} Mbps (Brutal 已启用)"
-  else
-    echo -e "${yellow}未设置带宽参数, 当前为 BBR 模式${re}"
-  fi
-  echo ""
-  echo -e "${yellow}--- V2rayN / Nekobox / Streisand ---${re}"
-  echo "hysteria2://$passwd@$HOST_IP:$port/?sni=www.bing.com&alpn=h3&insecure=1#$tag"
-  echo ""
-  echo -e "${yellow}--- Clash / Mihomo ---${re}"
-  echo "- name: $tag"
-  echo "  type: hysteria2"
-  echo "  server: $HOST_IP"
-  echo "  port: $port"
-  echo "  password: $passwd"
-  if [ -n "${CFG_UP_MBPS:-}" ]; then
-    echo "  up: \"${CFG_UP_MBPS} Mbps\""
-    echo "  down: \"${CFG_DOWN_MBPS} Mbps\""
-  fi
-  echo "  sni: www.bing.com"
-  echo "  alpn:"
-  echo "    - h3"
-  echo "  skip-cert-verify: true"
-  echo ""
-  echo -e "${red}注意: 云厂商安全组 (如 AWS) 需手动放行 UDP $port, 脚本够不着控制台${re}"
 }
 
 # ---------------- 主流程 ----------------
@@ -706,13 +708,90 @@ uninstall_reality() {
   [[ -n "$port" ]] && echo -e "${yellow}提示: 云安全组中 TCP $port 的放行规则如不再需要, 请手动删除${re}"
 }
 
+show_hy2_info() {
+  [[ -f "$HY2_CONF" ]] || return 0
+  local port passwd
+  port=$(sed -n 's/^listen: :\([0-9][0-9]*\).*/\1/p' "$HY2_CONF" 2>/dev/null | head -1)
+  passwd=$(sed -n 's/^  password: "\(.*\)"$/\1/p' "$HY2_CONF" 2>/dev/null | head -1)
+  CFG_UP_MBPS=$(sed -n 's/^  up: \([0-9][0-9]*\) mbps$/\1/p' "$HY2_CONF" 2>/dev/null | head -1)
+  CFG_DOWN_MBPS=$(sed -n 's/^  down: \([0-9][0-9]*\) mbps$/\1/p' "$HY2_CONF" 2>/dev/null | head -1)
+  if [[ -z "$port" || -z "$passwd" ]]; then
+    echo -e "${red}Hysteria2 配置解析失败${re}"
+    return 0
+  fi
+  get_ip
+  print_links "$port" "$passwd"
+}
+
+show_reality_info() {
+  [[ -f "$XRAY_CONF" ]] || return 0
+  local xray_bin="/usr/local/bin/xray"
+  if [[ ! -x "$xray_bin" ]]; then
+    echo -e "${red}xray 程序缺失, 无法显示 Reality 节点信息${re}"
+    return 0
+  fi
+  local port uuid sni privkey shortid pubkey
+  port=$(grep -o '"port": [0-9][0-9]*' "$XRAY_CONF" 2>/dev/null | head -1 | grep -o '[0-9][0-9]*' || true)
+  uuid=$(grep -o '"id": "[^"]*"' "$XRAY_CONF" 2>/dev/null | head -1 | cut -d'"' -f4 || true)
+  sni=$(grep -o '"serverNames": \["[^"]*"\]' "$XRAY_CONF" 2>/dev/null | head -1 | cut -d'"' -f4 || true)
+  privkey=$(grep -o '"privateKey": "[^"]*"' "$XRAY_CONF" 2>/dev/null | head -1 | cut -d'"' -f4 || true)
+  shortid=$(grep -o '"shortIds": \["[^"]*"\]' "$XRAY_CONF" 2>/dev/null | head -1 | cut -d'"' -f4 || true)
+  if [[ -z "$port" || -z "$uuid" || -z "$privkey" ]]; then
+    echo -e "${red}Reality 配置解析失败${re}"
+    return 0
+  fi
+  pubkey=$("$xray_bin" x25519 -i "$privkey" 2>/dev/null | awk -F': *' 'tolower($0)~/public/{print $2; exit}' | awk '{print $1}')
+  [[ -z "$pubkey" ]] && pubkey=$("$xray_bin" x25519 -i "$privkey" 2>/dev/null | tr -d '\r' | awk '{print $NF}')
+  if [[ -z "$pubkey" ]]; then
+    echo -e "${red}从私钥推导公钥失败${re}"
+    return 0
+  fi
+  get_ip
+  local ip="$HOST_IP" tag="Reality-${HOST_IP}"
+  if [[ "$ip" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.) ]]; then
+    echo -e "${yellow}检测到内网 IP ($ip), 疑似 NAT 机器: 下方链接请把 IP 手动替换为公网 IP${re}"
+  fi
+  local url="vless://${uuid}@${ip}:${port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${sni}&fp=chrome&pbk=${pubkey}&sid=${shortid}&type=tcp&headerType=none#${tag}"
+  echo ""
+  echo -e "${green}========== Reality 节点信息 ==========${re}"
+  echo -e "\e[1;36m${url}\e[0m"
+  echo ""
+  if command -v qrencode &>/dev/null; then
+    qrencode -t ANSIUTF8 -m 2 -o - "$url" || true
+    echo ""
+  fi
+  echo "--- Clash / Mihomo 配置片段 ---"
+  echo "- name: ${tag}"
+  echo "  type: vless"
+  echo "  server: ${ip}"
+  echo "  port: ${port}"
+  echo "  uuid: ${uuid}"
+  echo "  network: tcp"
+  echo "  tls: true"
+  echo "  udp: true"
+  echo "  flow: xtls-rprx-vision"
+  echo "  servername: ${sni}"
+  echo "  client-fingerprint: chrome"
+  echo "  reality-opts:"
+  echo "    public-key: ${pubkey}"
+  echo "    short-id: ${shortid}"
+  echo ""
+}
+
+show_node_info() {
+  local found=0
+  if [[ -f "$HY2_CONF" ]]; then found=1; show_hy2_info; fi
+  if [[ -f "$XRAY_CONF" ]]; then found=1; show_reality_info; fi
+  [[ "$found" == "1" ]] || echo -e "${yellow}尚未安装任何协议${re}"
+}
+
 # ============================================================================
 # 菜单与分发
 # ============================================================================
 INSTALL_ARGS=()
 for arg in "$@"; do
   case "$arg" in
-    hy2|reality|uninstall-hy2|uninstall-reality) MODE="$arg" ;;
+    hy2|reality|uninstall-hy2|uninstall-reality|show) MODE="$arg" ;;
     *) INSTALL_ARGS+=("$arg") ;;
   esac
 done
@@ -730,16 +809,18 @@ if [[ "$MODE" == "ask" ]]; then
   echo ""
   echo "  1) 安装 Hysteria2  (自动测速调优) [重装会覆盖已有安装]"
   echo "  2) 安装 Reality    (VLESS + Reality) [重装会覆盖已有安装]"
-  echo "  3) 卸载 Hysteria2"
-  echo "  4) 卸载 Reality"
+  echo "  3) 查看已安装节点信息"
+  echo "  4) 卸载 Hysteria2"
+  echo "  5) 卸载 Reality"
   echo "  0) 退出"
   echo -e "${green}====================================${re}"
-  read -r -p "输入序号 [1/2/3/4/0]: " _c </dev/tty
+  read -r -p "输入序号 [1/2/3/4/5/0]: " _c </dev/tty
   case "$_c" in
     1) MODE=hy2 ;;
     2) MODE=reality ;;
-    3) MODE=uninstall-hy2 ;;
-    4) MODE=uninstall-reality ;;
+    3) MODE=show ;;
+    4) MODE=uninstall-hy2 ;;
+    5) MODE=uninstall-reality ;;
     0) echo "已退出"; exit 0 ;;
     *) die "无效选择" ;;
   esac
@@ -750,7 +831,8 @@ case "$MODE" in
   reality)           run_reality ;;
   uninstall-hy2)     uninstall_hy2 ;;
   uninstall-reality) uninstall_reality ;;
-  *)                 die "MODE 非法: $MODE (可选 ask/hy2/reality/uninstall-hy2/uninstall-reality)" ;;
+  show)              show_node_info ;;
+  *)                 die "MODE 非法: $MODE (可选 ask/hy2/reality/uninstall-hy2/uninstall-reality/show)" ;;
 esac
 
 [[ "$INTERACTIVE" == "1" ]] || break

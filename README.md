@@ -8,7 +8,7 @@ Hysteria2 + VLESS Reality 二合一安装脚本。
 bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy2-reality.sh)
 ```
 
-菜单会先显示各协议的已安装状态（端口、运行状态），然后可选：1/2 安装（重装会覆盖已有安装）、3/4 卸载、0 退出。
+菜单会先显示各协议的已安装状态（端口、运行状态），然后可选：1/2 安装（重装会覆盖已有安装）、3 查看已安装节点信息、4/5 卸载、0 退出。安装/卸载/查看完成后按任意键返回主菜单。
 
 ## 直接指定协议
 
@@ -22,6 +22,12 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy2-reality.sh) reality
+```
+
+## 查看已安装节点信息
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy2-reality.sh) show
 ```
 
 ## 卸载

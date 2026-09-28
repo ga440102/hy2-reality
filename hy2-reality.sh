@@ -627,11 +627,13 @@ if [[ "$MODE" == "ask" ]]; then
   echo -e "${green}======== 请选择安装类型 ========${re}"
   echo "  1) Hysteria2  (自动测速调优，Brutal)"
   echo "  2) Reality    (VLESS + Reality)"
+  echo "  0) 退出"
   echo -e "${green}================================${re}"
-  read -r -p "输入序号 [1/2]: " _c </dev/tty
+  read -r -p "输入序号 [1/2/0]: " _c </dev/tty
   case "$_c" in
     1) MODE=hy2 ;;
     2) MODE=reality ;;
+    0) echo "已退出"; exit 0 ;;
     *) die "无效选择" ;;
   esac
 fi

@@ -26,7 +26,8 @@
 #             测速失败时可重测 / 降级 BBR / 退出
 #   Reality 部分: VLESS + TCP + Reality, 伪装站与 SNI 一致, 自动放行防火墙,
 #             输出 vless 链接 + 二维码 + Clash 配置片段
-#   菜单开机先显示已安装状态; 卸载会删除服务、配置、证书/密钥与二进制, 并清理本机防火墙规则
+#   菜单开机先显示已安装状态; 操作完成后按任意键返回主菜单;
+#   卸载会删除服务、配置、证书/密钥与二进制, 并清理本机防火墙规则
 # ============================================================================
 (
 export LANG=en_US.UTF-8
@@ -716,6 +717,10 @@ for arg in "$@"; do
   esac
 done
 
+INTERACTIVE=0
+[[ "$MODE" == "ask" ]] && INTERACTIVE=1
+
+while true; do
 if [[ "$MODE" == "ask" ]]; then
   detect_status
   echo ""
@@ -747,4 +752,11 @@ case "$MODE" in
   uninstall-reality) uninstall_reality ;;
   *)                 die "MODE 非法: $MODE (可选 ask/hy2/reality/uninstall-hy2/uninstall-reality)" ;;
 esac
+
+[[ "$INTERACTIVE" == "1" ]] || break
+echo ""
+read -n1 -s -r -p "按任意键返回主菜单... " _dummy </dev/tty
+echo ""
+MODE=ask
+done
 )

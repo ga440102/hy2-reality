@@ -814,6 +814,7 @@ if [[ "$MODE" == "ask" ]]; then
   echo "  5) 卸载 Reality"
   echo "  0) 退出"
   echo -e "${green}====================================${re}"
+  echo -e "  ${yellow}提示：按 README 设置快捷命令后，下次直接输入 hy2 即可进入本菜单${re}"
   read -r -p "输入序号 [1/2/3/4/5/0]: " _c </dev/tty
   case "$_c" in
     1) MODE=hy2 ;;

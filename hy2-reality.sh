@@ -803,7 +803,7 @@ while true; do
 if [[ "$MODE" == "ask" ]]; then
   detect_status
   echo ""
-  echo -e "${green}======== HY2 / Reality 管理 ========${re}"
+  echo -e "${green}======== HY2 / Reality 管理 (总统开发) ========${re}"
   echo -e "  Hysteria2: ${skyblue}${HY2_STATE}${HY2_DETAIL:+ ($HY2_DETAIL)}${re}"
   echo -e "  Reality:   ${skyblue}${RE_STATE}${RE_DETAIL:+ ($RE_DETAIL)}${re}"
   echo ""

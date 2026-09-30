@@ -2,6 +2,20 @@
 
 Hysteria2 + VLESS Reality 二合一安装脚本。
 
+安装 HY2 前脚本会自动测速：下载、上传各测 3 次，取中位数 × 0.8 作为带宽参数，启用 Brutal 拥塞控制。测速失败时会让你选择重测 / 降级 BBR 安装 / 退出，不会自动替你决定。
+
+只测速不安装：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy2-reality.sh) hy2 --measure-only
+```
+
+跳过测速、以 BBR 模式安装：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy2-reality.sh) hy2 --no-bandwidth
+```
+
 ## 一键运行（root）
 
 ```bash
@@ -40,22 +54,6 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy2-reality.sh) show
-```
-
-## 带宽测速（HY2）
-
-安装 HY2 前脚本会自动测速：下载、上传各测 3 次，取中位数 × 0.8 作为带宽参数，启用 Brutal 拥塞控制。测速失败时会让你选择重测 / 降级 BBR 安装 / 退出，不会自动替你决定。
-
-只测速不安装：
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy2-reality.sh) hy2 --measure-only
-```
-
-跳过测速、以 BBR 模式安装：
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy2-reality.sh) hy2 --no-bandwidth
 ```
 
 ## 卸载

@@ -26,14 +26,10 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy
 
 ## 快捷命令（一个单词进菜单）
 
-在 VPS 的 root 终端粘贴一次，以后打 `hy2` 就直接进菜单，不用再粘长命令：
+在 VPS 的 root 终端粘贴一次，脚本存到本地，以后打 `hy2` 就直接进菜单：
 
 ```bash
-cat > /usr/local/bin/hy2 <<'EOF'
-#!/bin/bash
-exec bash <(curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy2-reality.sh) "$@"
-EOF
-chmod +x /usr/local/bin/hy2
+curl -fsSL https://raw.githubusercontent.com/ga440102/hy2-reality/main/hy2-reality.sh -o /usr/local/bin/hy2.sh && chmod +x /usr/local/bin/hy2.sh && echo "alias hy2='bash /usr/local/bin/hy2.sh'" >> ~/.bashrc && source ~/.bashrc
 ```
 
 ## 直接指定协议
